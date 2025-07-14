@@ -48,7 +48,7 @@ elif selected_item == "出庫":
     if "last_stock_number_out" not in st.session_state:
         st.session_state.last_stock_number_out = ""
     stock_number = st.text_input("品番を入力してください: ").strip()
-    if stock_number != st.session_state.last_stock_number_out:
+    if stock_number and stock_number != st.session_state.last_stock_number_out:
         st.session_state.found_stock_name_out = None
         st.session_state.last_stock_number_out = stock_number
         for stock in utils.get_stocks():  # 毎回最新を取得
@@ -71,8 +71,9 @@ elif selected_item == "物品登録":
     st.subheader("物品登録")
     stock_number = st.text_input("品番（例: A001）")
     stock_name = st.text_input("品名（例: ボールペン）")
+    unit = st.text_input("単位（例: 箱、個）")
     if st.button("登録"):
-        utils.add_stock(stock_number, stock_name)
+        utils.add_stock(stock_number, stock_name, unit)
 
 elif selected_item == "物品削除":
     st.subheader("物品削除")

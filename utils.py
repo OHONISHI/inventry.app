@@ -7,7 +7,7 @@ import os
 
 # 🔹 CSVファイルのパス
 DATA_FILE = "inventory.csv"
-COLUMNS   = ["品番", "品名", "数量"]   # 固定ヘッダー
+COLUMNS   = ["品番", "品名", "数量","単位"]   # 固定ヘッダー
 
 def _ensure_data_file() -> None:
     """CSV が無い or 中身ゼロのとき、ヘッダー付きで作成する"""
@@ -36,16 +36,16 @@ def get_stocks():
 
 
 # 新しい物品を登録
-def add_stock(stock_number, stock_name):
-    stock_number = str(stock_number)
+def add_stock(stock_number, stock_name, unit):
+    stock_number = str(stock_number)[:6]  # 品番は最大6文字
     df = load_data()
     if stock_number in df["品番"].values:
         existing_name = df.loc[df["品番"] == stock_number, "品名"].values[0]
         st.error(f"品番「{stock_number}」品名「{existing_name}」は既に存在します。")
         return
-    df.loc[len(df)] = [stock_number, stock_name, 0]
+    df.loc[len(df)] = [stock_number, stock_name, 0, unit]  # 数量は初期値0
     save_data(df)
-    st.success(f"品番「{stock_number}」品名「{stock_name}」を登録しました。")
+    st.success(f"品番「{stock_number}」品名「{stock_name}」（単位：{unit}）を登録しました。")
 
 
 # 在庫一覧
@@ -60,7 +60,7 @@ def stock_list():
 
 # 出庫処理
 def remove_stock(stock_number, quantity):
-    stock_number = str(stock_number)
+    stock_number = str(stock_number)[:6]  # 品番は最大6文字
     df = load_data()
     for index, row in df.iterrows():
         if row["品番"] == stock_number:
@@ -70,28 +70,30 @@ def remove_stock(stock_number, quantity):
                 return
             df.at[index, "数量"] = str(current_quantity - quantity)
             save_data(df)
-            st.success(f"品番「{stock_number}」品名「{row['品名']}」を{quantity}個出庫しました。")
+            unit = row["単位"]
+            st.success(f"品番「{stock_number}」品名「{row['品名']}」を{quantity}{unit}個出庫しました。")
             return
     st.error(f"品番「{stock_number}」は見つかりませんでした。")
 
 
 # 入庫処理
 def add_stock_quantity(stock_number, quantity):
-    stock_number = str(stock_number)
+    stock_number = str(stock_number)[:6]  # 品番は最大6文字
     df = load_data()
     for index, row in df.iterrows():
         if row["品番"] == stock_number:
             new_quantity = int(row["数量"]) + int(quantity)
             df.at[index, "数量"] = str(new_quantity)
             save_data(df)
-            st.success(f"品番「{stock_number}」品名「{row['品名']}」を{quantity}個入庫しました。")
+            unit = row["単位"]
+            st.success(f"品番「{stock_number}」品名「{row['品名']}」を{quantity}{unit}個入庫しました。")
             return
     st.error(f"品番「{stock_number}」は見つかりませんでした。")
 
 
 # 削除処理
 def delete_stock(stock_number):
-    stock_number = str(stock_number)
+    stock_number = str(stock_number)[:6]  # 品番は最大6文字
     df = load_data()
     updated_df = df[df["品番"] != stock_number]
     if len(updated_df) == len(df):
