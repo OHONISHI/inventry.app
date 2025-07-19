@@ -3,7 +3,10 @@
 """
 import streamlit as st
 import pandas as pd
+from datetime import datetime, timedelta
 import os
+from logger import logger
+
 
 # 🔹 CSVファイルのパス
 DATA_FILE = "inventory.csv"
@@ -41,10 +44,12 @@ def add_stock(stock_number, stock_name, unit):
     df = load_data()
     if stock_number in df["品番"].values:
         existing_name = df.loc[df["品番"] == stock_number, "品名"].values[0]
+        logger.warning(f"登録失敗: 品番「{stock_number}」品名「{existing_name}」は既に存在します。")
         st.error(f"品番「{stock_number}」品名「{existing_name}」は既に存在します。")
         return
     df.loc[len(df)] = [stock_number, stock_name, 0, unit]  # 数量は初期値0
     save_data(df)
+    logger.info(f"新規登録: 品番「{stock_number}」品名「{stock_name}」（単位：{unit}）")
     st.success(f"品番「{stock_number}」品名「{stock_name}」（単位：{unit}）を登録しました。")
 
 
@@ -71,8 +76,11 @@ def remove_stock(stock_number, quantity):
             df.at[index, "数量"] = str(current_quantity - quantity)
             save_data(df)
             unit = row["単位"]
+            save_history("出庫", stock_number, row["品名"], quantity, unit)
+            logger.info(f"出庫完了: {stock_number} - {quantity}{unit}")
             st.success(f"品番「{stock_number}」品名「{row['品名']}」を{quantity}{unit}個出庫しました。")
             return
+    logger.warning(f"在庫不足または品番未登録: {stock_number}")
     st.error(f"品番「{stock_number}」は見つかりませんでした。")
 
 
@@ -86,8 +94,11 @@ def add_stock_quantity(stock_number, quantity):
             df.at[index, "数量"] = str(new_quantity)
             save_data(df)
             unit = row["単位"]
+            save_history("入庫", stock_number, row["品名"], quantity, unit)
+            logger.info(f"入庫完了: {stock_number} - {quantity}{unit}")    
             st.success(f"品番「{stock_number}」品名「{row['品名']}」を{quantity}{unit}個入庫しました。")
             return
+    logger.warning(f"在庫不足または品番未登録: {stock_number}")    
     st.error(f"品番「{stock_number}」は見つかりませんでした。")
 
 
@@ -97,7 +108,48 @@ def delete_stock(stock_number):
     df = load_data()
     updated_df = df[df["品番"] != stock_number]
     if len(updated_df) == len(df):
+        logger.warning(f"削除失敗: 品番「{stock_number}」は在庫に存在しません。")
         st.warning(f"品番「{stock_number}」は在庫に存在しません。")
         return
     save_data(updated_df)
+    logger.info(f"品番「{stock_number}」を削除しました。")
     st.success(f"品番「{stock_number}」を削除しました。")
+
+# 履歴管理
+HISTORY_FILE = "history.csv"
+HISTORY_COLUMNS = ["日時", "操作", "品番", "品名", "数量", "単位"]
+
+def _ensure_history_file():
+    if not os.path.exists(HISTORY_FILE):
+        pd.DataFrame(columns=HISTORY_COLUMNS).to_csv(HISTORY_FILE, index=False, encoding="utf-8-sig")
+
+def save_history(operation, stock_number, stock_name, quantity=None, unit=None):
+    _ensure_history_file()
+    #現在の日時
+    now = datetime.now()
+    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    # 履歴読み込み
+    df = pd.read_csv(HISTORY_FILE)
+    # 2週間以上前の履歴を削除
+    if not df.empty:
+        try:
+            df = df.copy()
+            df["日時"] = pd.to_datetime(df["日時"], format="%Y-%m-%d %H:%M:%S", errors="coerce")
+            two_weeks_ago = now - timedelta(weeks=2)
+            df = df[df["日時"] >= two_weeks_ago]  # 残すのは2週間以内の履歴のみ
+        except Exception as e:
+            logger.error("履歴の日付処理に失敗しました:", e)
+
+    new_record = {
+        "日時": now_str,
+        "操作": operation,
+        "品番": stock_number,
+        "品名": stock_name,
+        "数量": quantity if quantity is not None else "",
+        "単位": unit if unit is not None else "",
+    }
+    df.loc[len(df)] = new_record
+    # 保存
+    df.to_csv(HISTORY_FILE, index=False, encoding="utf-8-sig")
+
+

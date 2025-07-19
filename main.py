@@ -1,10 +1,12 @@
 import streamlit as st
+import pandas as pd
 import utils as utils
+from logger import logger
 
 st.title("在庫管理システム")
 
 st.sidebar.title("メニュー")
-selected_item = st.sidebar.radio("モードを選択してください", ("物品在庫一覧","入庫","出庫","物品登録","物品削除"))
+selected_item = st.sidebar.radio("モードを選択してください", ("物品在庫一覧","入庫","出庫","物品登録","物品削除","履歴"))
 
 if selected_item == "物品在庫一覧":
     st.subheader("物品在庫一覧")
@@ -110,3 +112,15 @@ elif selected_item == "物品削除":
             st.session_state.found_stock_name = None
         else:
             st.error("登録されていない品番、または確認チェックが必要です。")
+
+elif selected_item == "履歴":
+    st.subheader("操作履歴")
+    try:
+        history_df = pd.read_csv("history.csv")
+        if history_df.empty:
+            st.info("履歴がまだ記録されていません。")
+        else:
+            st.dataframe(history_df)
+    except FileNotFoundError:
+        st.info("履歴ファイルがまだ存在していません。")
+
