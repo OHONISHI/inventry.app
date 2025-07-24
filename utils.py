@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import os
+import csv
 from logger import logger
 
 
@@ -77,11 +78,37 @@ def remove_stock(stock_number, quantity):
             save_data(df)
             unit = row["単位"]
             save_history("出庫", stock_number, row["品名"], quantity, unit)
+            # 🔽 order.csv に追記
+            write_order_record(stock_number=stock_number, stock_name=row["品名"], quantity=quantity, unit=unit)
             logger.info(f"出庫完了: {stock_number} - {quantity}{unit}")
-            st.success(f"品番「{stock_number}」品名「{row['品名']}」を{quantity}{unit}個出庫しました。")
+            st.success(f"品番「{stock_number}」品名「{row['品名']}」を{quantity}{unit}出庫しました。")
             return
     logger.warning(f"在庫不足または品番未登録: {stock_number}")
     st.error(f"品番「{stock_number}」は見つかりませんでした。")
+
+
+ORDER_FILE = "order.csv"
+
+# 🔹 order.csv が無ければヘッダー付きで作成
+def _ensure_order_file():
+    """order.csv が無ければヘッダー付きで作成"""
+    if not os.path.exists(ORDER_FILE) or os.path.getsize(ORDER_FILE) == 0:
+        header = ["日付", "品番", "品名", "数量", "単位"]
+        pd.DataFrame(columns=header).to_csv(ORDER_FILE, index=False, encoding="utf-8-sig")
+
+
+# 🔽 出庫内容を order.csv に記録する関数
+def write_order_record(stock_number, stock_name, quantity, unit, file_path=ORDER_FILE):
+    _ensure_order_file()
+    header = ["日付", "品番", "品名", "数量", "単位"]
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    row = [now, stock_number, stock_name, quantity, unit]
+    file_exists = os.path.isfile(file_path)
+    with open(file_path, mode="a", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists or os.path.getsize(file_path) == 0:
+            writer.writerow(header)  # ← ヘッダーを書き込む
+        writer.writerow(row)
 
 
 # 入庫処理
@@ -96,10 +123,25 @@ def add_stock_quantity(stock_number, quantity):
             unit = row["単位"]
             save_history("入庫", stock_number, row["品名"], quantity, unit)
             logger.info(f"入庫完了: {stock_number} - {quantity}{unit}")    
-            st.success(f"品番「{stock_number}」品名「{row['品名']}」を{quantity}{unit}個入庫しました。")
+            st.success(f"品番「{stock_number}」品名「{row['品名']}」を{quantity}{unit}入庫しました。")
+            # 🔽🔽🔽 ここから追加：order.csv から古い出庫記録を削除
+            try:
+                if os.path.exists(ORDER_FILE) and os.path.getsize(ORDER_FILE) > 0:
+                    order_df = pd.read_csv(ORDER_FILE, encoding="utf-8-sig", dtype=str)
+                    # 対象品番でフィルタして、古い順にソート
+                    target_rows = order_df[order_df["品番"] == stock_number].sort_values("日付")
+                    if not target_rows.empty:
+                        delete_count = min(quantity, len(target_rows))  # 削除する最大行数
+                        order_df = order_df.drop(target_rows.index[:delete_count])
+                        order_df.to_csv(ORDER_FILE, index=False, encoding="utf-8-sig")
+                        logger.info(f"order.csvから{delete_count}件の出庫記録を削除しました。")
+            except Exception as e:
+                logger.warning(f"order.csv の削除処理中にエラーが発生: {e}")
+            # 🔼🔼🔼 ここまで追加
             return
     logger.warning(f"在庫不足または品番未登録: {stock_number}")    
     st.error(f"品番「{stock_number}」は見つかりませんでした。")
+    return
 
 
 # 削除処理
@@ -139,7 +181,6 @@ def save_history(operation, stock_number, stock_name, quantity=None, unit=None):
             df = df[df["日時"] >= two_weeks_ago]  # 残すのは2週間以内の履歴のみ
         except Exception as e:
             logger.error("履歴の日付処理に失敗しました:", e)
-
     new_record = {
         "日時": now_str,
         "操作": operation,

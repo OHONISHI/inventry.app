@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
+import os
 import utils as utils
 from logger import logger
 
 st.title("在庫管理システム")
 
 st.sidebar.title("メニュー")
-selected_item = st.sidebar.radio("モードを選択してください", ("物品在庫一覧","入庫","出庫","物品登録","物品削除","履歴"))
+selected_item = st.sidebar.radio("モードを選択してください", ("物品在庫一覧","入庫","出庫","出庫リスト","物品登録","物品削除","履歴"))
 
 if selected_item == "物品在庫一覧":
     st.subheader("物品在庫一覧")
@@ -68,6 +69,21 @@ elif selected_item == "出庫":
         else:
             st.error("登録されていない品番には出庫できません。")
 
+elif selected_item == "出庫リスト":
+    st.subheader("出庫リスト")
+    # ファイルが存在しない or サイズが0バイト（空）なら、ヘッダー付きで作成
+    utils._ensure_order_file()
+    try:
+        df = pd.read_csv(utils.ORDER_FILE, encoding="utf-8-sig")
+        if df.empty:
+            st.info("出庫記録がまだありません。")
+        else:
+            st.dataframe(df, use_container_width=True)
+    except pd.errors.EmptyDataError:
+        st.info("出庫記録がまだありません。")        
+    except Exception as e:
+            st.error("出庫リストの読み込み中にエラーが発生しました。")
+            st.exception(e)
 
 elif selected_item == "物品登録":
     st.subheader("物品登録")
